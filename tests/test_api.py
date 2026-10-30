@@ -129,5 +129,83 @@ def test_area_keeps_the_gulf_islands_and_leaves_out_the_mainland():
         assert not LOWER_ISLAND.contains(*place), place
 
 
+def weather_feature(**overrides):
+    """Return an Environment Canada feature like the live feed's."""
+    properties = {
+        "feature_id": "abc",
+        "alert_code": "WNW",
+        "alert_type": "warning",
+        "alert_name_en": "wind warning",
+        "feature_name_en": "Metro Vancouver",
+        "status_en": "issued",
+        "alert_text_en": "Strong winds.",
+        "publication_datetime": "2026-10-30T19:00:00Z",
+        "expiration_datetime": "2026-10-31T19:00:00Z",
+    }
+    return {
+        "properties": {**properties, **overrides},
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [[[-123.2, 49.1], [-122.8, 49.1], [-122.8, 49.4]]],
+        },
+    }
+
+
+def test_weather_reads_the_live_feed_sample():
+    alerts = api.parse_weather(fixture("weather.json"), NOW)
+    assert alerts
+    assert all(a.category == api.CATEGORY_WEATHER for a in alerts)
+    assert alerts[0].title == "Air quality warning: Yellowhead"
+    assert 40 < alerts[0].latitude < 60
+
+
+def test_weather_skips_ended_and_expired_alerts():
+    later = datetime(2026, 11, 1, tzinfo=UTC)
+    payload = {"features": [weather_feature()]}
+    assert len(api.parse_weather(payload, NOW)) == 1
+    assert not api.parse_weather(payload, later)
+    ended = {"features": [weather_feature(status_en="ended")]}
+    assert not api.parse_weather(ended, NOW)
+
+
+def test_alertable_leaves_weather_to_environment_canada():
+    payload = {
+        "entries": [
+            {
+                "id": "1",
+                "point": "48.4 -123.4",
+                "author_en": "Environment Canada",
+                "event_en": "wind",
+            }
+        ]
+    }
+    assert not api.parse_alertable(payload, LOWER_ISLAND)
+
+
+def test_uvic_quiet_page_has_no_alert():
+    page = (ROOT / "fixtures" / "uvic.html").read_text(encoding="utf-8")
+    assert api.parse_uvic(page) == []
+
+
+def test_uvic_emergency_page_makes_one_alert():
+    page = (ROOT / "fixtures" / "uvic.html").read_text(encoding="utf-8")
+    page = page.replace(
+        "There is currently no emergency at the University of Victoria.",
+        "Gas leak near the Clearihue Building &amp; library. Avoid the area.",
+    )
+    alerts = api.parse_uvic(page)
+    assert [a.id for a in alerts] == [api.UVIC_ALERT_ID]
+    assert alerts[0].detail.startswith("Gas leak near the Clearihue Building & library")
+    assert "Resources" not in alerts[0].detail
+
+
+def test_uvic_page_redesign_is_a_feed_error():
+    try:
+        api.parse_uvic("<html><main>New design</main></html>")
+    except api.FEED_ERRORS:
+        return
+    raise AssertionError("expected a feed error")
+
+
 def test_distance():
     assert 15 < api.distance_km(*VICTORIA, 48.3537, -123.6144) < 25

@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .api import UVIC_ALERT_ID
 from .coordinator import BcAlertsConfigEntry, BcAlertsCoordinator, BcAlertsData
 from .entity import alert_attributes, device_info
 
@@ -34,6 +35,12 @@ def _nearby_water_attributes(data: BcAlertsData) -> dict[str, Any]:
             for alert in data.nearby_water
         ]
     }
+
+
+def _uvic_attributes(data: BcAlertsData) -> dict[str, Any]:
+    """Describe the UVic emergency, if there is one."""
+    alert = data.alerts.get(UVIC_ALERT_ID)
+    return alert_attributes(alert, data.distances[alert.id]) if alert else {}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -60,6 +67,14 @@ BINARY_SENSORS = (
         device_class=BinarySensorDeviceClass.PROBLEM,
         is_on_fn=lambda data: bool(data.nearby_water),
         attributes_fn=_nearby_water_attributes,
+    ),
+    BcAlertBinaryDescription(
+        key="uvic_emergency",
+        name="UVic emergency",
+        icon="mdi:school",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        is_on_fn=lambda data: UVIC_ALERT_ID in data.alerts,
+        attributes_fn=_uvic_attributes,
     ),
     BcAlertBinaryDescription(
         key="feed_problem",

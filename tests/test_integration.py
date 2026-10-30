@@ -20,6 +20,8 @@ from custom_components.bc_alerts.api import (
     DRIVEBC_URL,
     EVACUATION_URL,
     HYDRO_URL,
+    UVIC_URL,
+    WEATHER_URL,
     Alert,
 )
 from custom_components.bc_alerts.const import DOMAIN
@@ -52,6 +54,8 @@ def mock_feeds(aioclient_mock: AiohttpClientMocker) -> None:
     aioclient_mock.get(DRIVEBC_URL, text=text("drivebc.json"))
     aioclient_mock.get(ALERTABLE_URL, text=text("alertable.json"))
     aioclient_mock.get(EVACUATION_URL, text=text("evacuation.json"))
+    aioclient_mock.get(WEATHER_URL, text=text("weather.json"))
+    aioclient_mock.get(UVIC_URL, text=text("uvic.html"))
 
 
 async def setup_entry(hass: HomeAssistant) -> MockConfigEntry:
@@ -95,6 +99,8 @@ async def test_entities_and_pins(
     assert int(hass.states.get("sensor.bc_alerts_water_notices").state) > 0
     assert hass.states.get("binary_sensor.bc_alerts_outage_at_home").state == "off"
     assert hass.states.get("binary_sensor.bc_alerts_feed_problem").state == "off"
+    assert hass.states.get("binary_sensor.bc_alerts_uvic_emergency").state == "off"
+    assert int(hass.states.get("sensor.bc_alerts_weather_alerts").state) == 1
 
     water = hass.states.get("binary_sensor.bc_alerts_water_notice_nearby")
     assert water.state == "on"
@@ -162,6 +168,8 @@ async def test_failed_feed_keeps_last_alerts_and_flags_a_problem(
     aioclient_mock.get(DRIVEBC_URL, text=text("drivebc.json"))
     aioclient_mock.get(ALERTABLE_URL, text=text("alertable.json"))
     aioclient_mock.get(EVACUATION_URL, text=text("evacuation.json"))
+    aioclient_mock.get(WEATHER_URL, text=text("weather.json"))
+    aioclient_mock.get(UVIC_URL, text=text("uvic.html"))
     await entry.runtime_data.async_refresh()
     await hass.async_block_till_done()
 
@@ -184,6 +192,8 @@ async def test_ended_alerts_lose_their_pins(
     aioclient_mock.get(DRIVEBC_URL, text=text("drivebc.json"))
     aioclient_mock.get(ALERTABLE_URL, text=text("alertable.json"))
     aioclient_mock.get(EVACUATION_URL, text=text("evacuation.json"))
+    aioclient_mock.get(WEATHER_URL, text=text("weather.json"))
+    aioclient_mock.get(UVIC_URL, text=text("uvic.html"))
     await entry.runtime_data.async_refresh()
     await hass.async_block_till_done()
 

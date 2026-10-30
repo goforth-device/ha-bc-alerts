@@ -11,8 +11,10 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+import html
 import json
 import math
+import re
 from typing import Any
 
 from aiohttp import ClientError, ClientSession, ClientTimeout
@@ -27,6 +29,11 @@ EVACUATION_URL = (
     "Evacuation_Orders_and_Alerts/FeatureServer/0/query"
 )
 EVACUATION_MAP_URL = "https://www.emergencyinfobc.gov.bc.ca/"
+WEATHER_URL = "https://api.weather.gc.ca/collections/weather-alerts/items"
+WEATHER_MAP_URL = "https://weather.gc.ca/warnings/index_e.html?prov=bc"
+UVIC_URL = "https://www.uvic.ca/emergency.php"
+UVIC_LOCATION = (48.4634, -123.3117)
+UVIC_ALERT_ID = "uvic-emergency"
 
 USER_AGENT = "HomeAssistant-bc_alerts"
 REQUEST_TIMEOUT = ClientTimeout(total=30)
@@ -57,6 +64,16 @@ ALERTABLE_CATEGORIES = {
     "stormsurge": CATEGORY_WEATHER,
     "freezedrzl": CATEGORY_WEATHER,
 }
+
+# These come straight from their own feeds instead.
+ALERTABLE_SKIPPED_AUTHORS = {"DriveBC", "Environment Canada"}
+
+# The first section of UVic's page after the heading, up to the next section.
+UVIC_STATUS = re.compile(
+    r'class="(?![^"]*uv-sect--head)[^"]*\buv-sect\b[^"]*"[^>]*>'
+    r'(.*?)(?:class="[^"]*\buv-sect\b|</main>)',
+    re.DOTALL,
+)
 
 # A feed that changes shape raises one of these while it is being parsed.
 FEED_ERRORS = (
@@ -265,8 +282,7 @@ def parse_alertable(payload: dict[str, Any], bounds: Bounds) -> list[Alert]:
     for entry in payload["entries"]:
         if entry.get("state") == "ended" or entry.get("type_en") == "Cancelled":
             continue
-        # DriveBC alerts come straight from the DriveBC feed instead.
-        if entry.get("author_en") == "DriveBC":
+        if entry.get("author_en") in ALERTABLE_SKIPPED_AUTHORS:
             continue
         latitude, longitude = (float(part) for part in entry["point"].split())
         if not bounds.contains(latitude, longitude):
@@ -330,18 +346,84 @@ def parse_evacuation(payload: dict[str, Any]) -> list[Alert]:
     return alerts
 
 
+def parse_weather(payload: dict[str, Any], now: datetime) -> list[Alert]:
+    """Turn Environment Canada alerts into alerts, one per forecast area."""
+    alerts = []
+    for feature in payload["features"]:
+        properties = feature["properties"]
+        if (properties.get("status_en") or "").lower() in ("ended", "cancelled"):
+            continue
+        expires = _from_iso(properties.get("expiration_datetime"))
+        if expires and expires < now:
+            continue
+        latitude, longitude = _centroid(feature["geometry"])
+        name = properties.get("alert_name_en") or "Weather alert"
+        area = properties.get("feature_name_en") or "Unknown area"
+        alerts.append(
+            Alert(
+                id=f"weather-{properties['feature_id']}-{properties['alert_code']}",
+                source="Environment Canada",
+                category=CATEGORY_WEATHER,
+                title=f"{name[:1].upper()}{name[1:]}: {area}",
+                detail=(properties.get("alert_text_en") or name)[:500],
+                latitude=latitude,
+                longitude=longitude,
+                updated=_from_iso(properties.get("publication_datetime")),
+                url=WEATHER_MAP_URL,
+                extra={
+                    "alert_type": properties.get("alert_type"),
+                    "area": area,
+                    "colour": properties.get("risk_colour_en"),
+                    "expires": expires,
+                },
+            )
+        )
+    return alerts
+
+
+def parse_uvic(page: str) -> list[Alert]:
+    """Read UVic's emergency page, which raises if its layout changes."""
+    match = UVIC_STATUS.search(page)
+    if match is None:
+        raise ValueError("UVic emergency page layout changed")
+    text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", match[1])).split())
+    if "no emergency" in text.lower():
+        return []
+    latitude, longitude = UVIC_LOCATION
+    return [
+        Alert(
+            id=UVIC_ALERT_ID,
+            source="UVic",
+            category=CATEGORY_EMERGENCY,
+            title="UVic campus emergency",
+            detail=text[:500],
+            latitude=latitude,
+            longitude=longitude,
+            url=UVIC_URL,
+            extra={"issued_by": "University of Victoria"},
+        )
+    ]
+
+
+async def _fetch_text(
+    session: ClientSession, url: str, params: dict[str, str] | None = None
+) -> str:
+    """Fetch a URL as text."""
+    async with session.get(
+        url,
+        params=params,
+        headers={"User-Agent": USER_AGENT},
+        timeout=REQUEST_TIMEOUT,
+    ) as response:
+        response.raise_for_status()
+        return await response.text()
+
+
 async def _fetch_json(
     session: ClientSession, url: str, params: dict[str, str] | None = None
 ) -> Any:
     """Fetch a URL and decode it as JSON whatever its content type says."""
-    async with session.get(
-        url,
-        params=params,
-        headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
-        timeout=REQUEST_TIMEOUT,
-    ) as response:
-        response.raise_for_status()
-        return json.loads(await response.text())
+    return json.loads(await _fetch_text(session, url, params))
 
 
 async def _load_hydro(
@@ -388,6 +470,30 @@ async def _load_evacuation(
     return parse_evacuation(await _fetch_json(session, EVACUATION_URL, params))
 
 
+async def _load_weather(
+    session: ClientSession, bounds: Bounds, now: datetime
+) -> list[Alert]:
+    """Load weather alerts for Vancouver Island and Metro Vancouver.
+
+    This area is fixed and wider than the configured one, because storms that
+    reach the Island and the Lower Mainland are worth seeing together.
+    """
+    params = {
+        "f": "json",
+        "lang": "en",
+        "limit": "500",
+        "bbox": "-128.7,48.2,-122.2,51.0",
+    }
+    return parse_weather(await _fetch_json(session, WEATHER_URL, params), now)
+
+
+async def _load_uvic(
+    session: ClientSession, bounds: Bounds, now: datetime
+) -> list[Alert]:
+    """Load UVic's campus emergency status."""
+    return parse_uvic(await _fetch_text(session, UVIC_URL))
+
+
 Loader = Callable[[ClientSession, Bounds, datetime], Awaitable[list[Alert]]]
 
 FEEDS: dict[str, Loader] = {
@@ -395,6 +501,8 @@ FEEDS: dict[str, Loader] = {
     "DriveBC": _load_drivebc,
     "Alertable": _load_alertable,
     "EmergencyInfoBC": _load_evacuation,
+    "Environment Canada": _load_weather,
+    "UVic": _load_uvic,
 }
 
 

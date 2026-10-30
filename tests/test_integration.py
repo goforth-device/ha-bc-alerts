@@ -1,5 +1,6 @@
 """Load the integration in a real Home Assistant, serving saved feeds."""
 
+from dataclasses import replace
 import json
 from pathlib import Path
 
@@ -14,11 +15,15 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import (
 
 from custom_components.bc_alerts.api import (
     ALERTABLE_URL,
+    CATEGORY_ROAD,
+    CATEGORY_ROAD_CLOSURE,
     DRIVEBC_URL,
     EVACUATION_URL,
     HYDRO_URL,
+    Alert,
 )
 from custom_components.bc_alerts.const import DOMAIN
+from custom_components.bc_alerts.geo_location import CATEGORY_IMAGES, pin_image
 
 FIXTURES = Path(__file__).parent / "fixtures"
 AREA = {
@@ -99,6 +104,36 @@ async def test_entities_and_pins(
     assert pins
     assert all(pin.attributes["source"] == DOMAIN for pin in pins)
     assert all("latitude" in pin.attributes for pin in pins)
+
+    images = Path(__file__).parent.parent / "custom_components/bc_alerts/images"
+    pictures = {pin.attributes["entity_picture"] for pin in pins}
+    assert "/bc_alerts_static/power.svg" in pictures
+    assert "/bc_alerts_static/water.svg" in pictures
+    assert all((images / picture.rsplit("/", 1)[1]).is_file() for picture in pictures)
+
+
+def test_every_pin_image_exists() -> None:
+    images = Path(__file__).parent.parent / "custom_components/bc_alerts/images"
+    assert all((images / name).is_file() for name in CATEGORY_IMAGES.values())
+    assert (images / "road_work.svg").is_file()
+
+
+def test_road_work_gets_the_striped_pin() -> None:
+    work = Alert(
+        id="1",
+        source="DriveBC",
+        category=CATEGORY_ROAD,
+        title="Highway 1: Construction",
+        detail="",
+        latitude=48.4,
+        longitude=-123.4,
+        extra={"event_type": "CONSTRUCTION"},
+    )
+    crash = replace(work, extra={"event_type": "INCIDENT"})
+    closed = replace(work, category=CATEGORY_ROAD_CLOSURE)
+    assert pin_image(work).endswith("road_work.svg")
+    assert pin_image(crash).endswith("road_incident.svg")
+    assert pin_image(closed).endswith("road_closed.svg")
 
 
 async def test_outage_at_home_turns_on(

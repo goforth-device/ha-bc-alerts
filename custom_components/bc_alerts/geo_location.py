@@ -20,7 +20,7 @@ from .api import (
     CATEGORY_WEATHER,
     Alert,
 )
-from .const import DOMAIN
+from .const import DOMAIN, IMAGES_URL
 from .coordinator import BcAlertsConfigEntry, BcAlertsCoordinator
 from .entity import alert_attributes
 
@@ -43,6 +43,25 @@ CATEGORY_ICONS = {
     CATEGORY_WEATHER: "mdi:weather-lightning-rainy",
     CATEGORY_COMMUNITY: "mdi:bullhorn",
 }
+
+CATEGORY_IMAGES = {
+    CATEGORY_POWER: "power.svg",
+    CATEGORY_ROAD_CLOSURE: "road_closed.svg",
+    CATEGORY_ROAD: "road_incident.svg",
+    CATEGORY_WATER: "water.svg",
+    CATEGORY_EMERGENCY: "emergency.svg",
+    CATEGORY_WEATHER: "weather.svg",
+    CATEGORY_COMMUNITY: "notice.svg",
+}
+
+
+def pin_image(alert: Alert) -> str:
+    """Return the URL of the picture for an alert's pin."""
+    if alert.extra.get("event_type") == "CONSTRUCTION" and (
+        alert.category == CATEGORY_ROAD
+    ):
+        return f"{IMAGES_URL}/road_work.svg"
+    return f"{IMAGES_URL}/{CATEGORY_IMAGES[alert.category]}"
 
 
 async def async_setup_entry(
@@ -89,6 +108,7 @@ class BcAlertPin(CoordinatorEntity[BcAlertsCoordinator], GeolocationEvent):
         self.alert = alert
         self._attr_name = f"{CATEGORY_LABELS[alert.category]}: {alert.title}"
         self._attr_icon = CATEGORY_ICONS[alert.category]
+        self._attr_entity_picture = pin_image(alert)
         self._attr_latitude = alert.latitude
         self._attr_longitude = alert.longitude
         self._attr_distance = coordinator.data.distances[alert.id]

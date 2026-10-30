@@ -6,6 +6,7 @@ from datetime import timedelta
 
 DOMAIN = "bc_alerts"
 UPDATE_INTERVAL = timedelta(minutes=5)
+IMAGES_URL = "/bc_alerts_static"
 
 CONF_SOUTH = "south"
 CONF_WEST = "west"

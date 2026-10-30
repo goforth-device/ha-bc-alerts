@@ -1,0 +1,168 @@
+"""Load the integration in a real Home Assistant, serving saved feeds."""
+
+import json
+from pathlib import Path
+
+from homeassistant import config_entries
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
+import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.test_util.aiohttp import (
+    AiohttpClientMocker,
+)
+
+from custom_components.bc_alerts.api import (
+    ALERTABLE_URL,
+    DRIVEBC_URL,
+    EVACUATION_URL,
+    HYDRO_URL,
+)
+from custom_components.bc_alerts.const import DOMAIN
+
+FIXTURES = Path(__file__).parent / "fixtures"
+AREA = {
+    "south": 48.25,
+    "west": -124.9,
+    "north": 49.22,
+    "east": -123.0,
+    "island_only": True,
+    "nearby_km": 25,
+}
+
+
+@pytest.fixture(autouse=True)
+def enable_custom(enable_custom_integrations):
+    """Let Home Assistant load the integration."""
+
+
+def text(name: str) -> str:
+    """Return a saved feed."""
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+def mock_feeds(aioclient_mock: AiohttpClientMocker) -> None:
+    """Serve every feed from its saved sample."""
+    aioclient_mock.get(HYDRO_URL, text=text("hydro.json"))
+    aioclient_mock.get(DRIVEBC_URL, text=text("drivebc.json"))
+    aioclient_mock.get(ALERTABLE_URL, text=text("alertable.json"))
+    aioclient_mock.get(EVACUATION_URL, text=text("evacuation.json"))
+
+
+async def setup_entry(hass: HomeAssistant) -> MockConfigEntry:
+    """Add and load an entry."""
+    entry = MockConfigEntry(domain=DOMAIN, data=AREA, unique_id=DOMAIN)
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    return entry
+
+
+async def test_config_flow_creates_one_entry(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    mock_feeds(aioclient_mock)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    assert result["type"] is FlowResultType.FORM
+
+    bad = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**AREA, "south": 50.0}
+    )
+    assert bad["errors"] == {"base": "invalid_area"}
+
+    done = await hass.config_entries.flow.async_configure(result["flow_id"], AREA)
+    await hass.async_block_till_done()
+    assert done["type"] is FlowResultType.CREATE_ENTRY
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+
+
+async def test_entities_and_pins(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    hass.config.latitude = 48.4284
+    hass.config.longitude = -123.3656
+    mock_feeds(aioclient_mock)
+    await setup_entry(hass)
+
+    assert int(hass.states.get("sensor.bc_alerts_power_outages").state) > 0
+    assert int(hass.states.get("sensor.bc_alerts_water_notices").state) > 0
+    assert hass.states.get("binary_sensor.bc_alerts_outage_at_home").state == "off"
+    assert hass.states.get("binary_sensor.bc_alerts_feed_problem").state == "off"
+
+    water = hass.states.get("binary_sensor.bc_alerts_water_notice_nearby")
+    assert water.state == "on"
+    assert water.attributes["alerts"][0]["distance_km"] <= 25
+
+    pins = hass.states.async_all("geo_location")
+    assert pins
+    assert all(pin.attributes["source"] == DOMAIN for pin in pins)
+    assert all("latitude" in pin.attributes for pin in pins)
+
+
+async def test_outage_at_home_turns_on(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    rows = json.loads(text("hydro.json"))
+    rows = [r for r in rows if r["municipality"] == "Metchosin"]
+    hass.config.latitude = rows[0]["latitude"]
+    hass.config.longitude = rows[0]["longitude"]
+    mock_feeds(aioclient_mock)
+    await setup_entry(hass)
+    state = hass.states.get("binary_sensor.bc_alerts_outage_at_home")
+    assert state.state == "on"
+    assert state.attributes["customers_out"] == rows[0]["numCustomersOut"]
+
+
+async def test_failed_feed_keeps_last_alerts_and_flags_a_problem(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    mock_feeds(aioclient_mock)
+    entry = await setup_entry(hass)
+    before = hass.states.get("sensor.bc_alerts_power_outages").state
+
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(HYDRO_URL, status=500)
+    aioclient_mock.get(DRIVEBC_URL, text=text("drivebc.json"))
+    aioclient_mock.get(ALERTABLE_URL, text=text("alertable.json"))
+    aioclient_mock.get(EVACUATION_URL, text=text("evacuation.json"))
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+
+    assert hass.states.get("sensor.bc_alerts_power_outages").state == before
+    problem = hass.states.get("binary_sensor.bc_alerts_feed_problem")
+    assert problem.state == "on"
+    assert "BC Hydro" in problem.attributes["failed_feeds"]
+
+
+async def test_ended_alerts_lose_their_pins(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    mock_feeds(aioclient_mock)
+    entry = await setup_entry(hass)
+    count = len(hass.states.async_all("geo_location"))
+    assert count
+
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(HYDRO_URL, text="[]")
+    aioclient_mock.get(DRIVEBC_URL, text=text("drivebc.json"))
+    aioclient_mock.get(ALERTABLE_URL, text=text("alertable.json"))
+    aioclient_mock.get(EVACUATION_URL, text=text("evacuation.json"))
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+
+    assert hass.states.get("sensor.bc_alerts_power_outages").state == "0"
+    assert len(hass.states.async_all("geo_location")) < count
+
+
+async def test_unload_removes_the_pins(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    mock_feeds(aioclient_mock)
+    entry = await setup_entry(hass)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert all(
+        pin.state == "unavailable" for pin in hass.states.async_all("geo_location")
+    ) or not hass.states.async_all("geo_location")

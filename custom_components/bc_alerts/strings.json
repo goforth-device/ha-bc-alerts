@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Area to watch",
+        "description": "The defaults cover lower Vancouver Island and the southern Gulf Islands.",
+        "data": {
+          "south": "South edge (latitude)",
+          "west": "West edge (longitude)",
+          "north": "North edge (latitude)",
+          "east": "East edge (longitude)",
+          "island_only": "Leave out the Lower Mainland",
+          "nearby_km": "Count water notices as nearby within"
+        }
+      }
+    },
+    "error": {
+      "invalid_area": "South must be less than north, and west less than east."
+    },
+    "abort": {
+      "already_configured": "BC Alerts is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Area to watch",
+        "data": {
+          "south": "South edge (latitude)",
+          "west": "West edge (longitude)",
+          "north": "North edge (latitude)",
+          "east": "East edge (longitude)",
+          "island_only": "Leave out the Lower Mainland",
+          "nearby_km": "Count water notices as nearby within"
+        }
+      }
+    },
+    "error": {
+      "invalid_area": "South must be less than north, and west less than east."
+    }
+  }
+}

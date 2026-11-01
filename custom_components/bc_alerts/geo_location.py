@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import (
+    CATEGORY_AIR,
     CATEGORY_COMMUNITY,
     CATEGORY_EMERGENCY,
     CATEGORY_POWER,
@@ -31,6 +32,7 @@ CATEGORY_LABELS = {
     CATEGORY_WATER: "Water",
     CATEGORY_EMERGENCY: "Emergency",
     CATEGORY_WEATHER: "Weather",
+    CATEGORY_AIR: "Air",
     CATEGORY_COMMUNITY: "Notice",
 }
 
@@ -41,6 +43,7 @@ CATEGORY_ICONS = {
     CATEGORY_WATER: "mdi:water-alert",
     CATEGORY_EMERGENCY: "mdi:alert-octagon",
     CATEGORY_WEATHER: "mdi:weather-lightning-rainy",
+    CATEGORY_AIR: "mdi:smog",
     CATEGORY_COMMUNITY: "mdi:bullhorn",
 }
 
@@ -51,6 +54,7 @@ CATEGORY_IMAGES = {
     CATEGORY_WATER: "water.svg",
     CATEGORY_EMERGENCY: "emergency.svg",
     CATEGORY_WEATHER: "weather.svg",
+    CATEGORY_AIR: "air_quality.svg",
     CATEGORY_COMMUNITY: "notice.svg",
 }
 

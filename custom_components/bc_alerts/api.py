@@ -44,6 +44,7 @@ CATEGORY_ROAD = "road"
 CATEGORY_WATER = "water"
 CATEGORY_EMERGENCY = "emergency"
 CATEGORY_WEATHER = "weather"
+CATEGORY_AIR = "air_quality"
 CATEGORY_COMMUNITY = "community"
 
 ALERTABLE_CATEGORIES = {
@@ -73,6 +74,18 @@ UVIC_STATUS = re.compile(
     r'class="(?![^"]*uv-sect--head)[^"]*\buv-sect\b[^"]*"[^>]*>'
     r'(.*?)(?:class="[^"]*\buv-sect\b|</main>)',
     re.DOTALL,
+)
+
+# A rough outline of the Capital Regional District, Port Renfrew to Saturna
+# with the Gulf Islands, as (lat, lon). Its west edge runs up the water between
+# Salt Spring and Duncan, and it only needs to hold the centre of an alert area.
+CRD_OUTLINE = (
+    (48.20, -124.70),
+    (48.64, -124.70),
+    (48.64, -123.56),
+    (49.02, -123.56),
+    (49.02, -123.00),
+    (48.20, -123.00),
 )
 
 # A feed that changes shape raises one of these while it is being parsed.
@@ -347,7 +360,10 @@ def parse_evacuation(payload: dict[str, Any]) -> list[Alert]:
 
 
 def parse_weather(payload: dict[str, Any], now: datetime) -> list[Alert]:
-    """Turn Environment Canada alerts into alerts, one per forecast area."""
+    """Turn Environment Canada alerts into alerts, one per forecast area.
+
+    Air quality is local, so only warnings for the CRD are kept.
+    """
     alerts = []
     for feature in payload["features"]:
         properties = feature["properties"]
@@ -358,12 +374,15 @@ def parse_weather(payload: dict[str, Any], now: datetime) -> list[Alert]:
             continue
         latitude, longitude = _centroid(feature["geometry"])
         name = properties.get("alert_name_en") or "Weather alert"
+        air_quality = "air quality" in name.lower()
+        if air_quality and not point_in_polygon(latitude, longitude, CRD_OUTLINE):
+            continue
         area = properties.get("feature_name_en") or "Unknown area"
         alerts.append(
             Alert(
                 id=f"weather-{properties['feature_id']}-{properties['alert_code']}",
                 source="Environment Canada",
-                category=CATEGORY_WEATHER,
+                category=CATEGORY_AIR if air_quality else CATEGORY_WEATHER,
                 title=f"{name[:1].upper()}{name[1:]}: {area}",
                 detail=(properties.get("alert_text_en") or name)[:500],
                 latitude=latitude,

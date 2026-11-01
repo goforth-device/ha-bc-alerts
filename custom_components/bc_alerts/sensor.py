@@ -15,6 +15,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import (
+    CATEGORY_AIR,
     CATEGORY_COMMUNITY,
     CATEGORY_EMERGENCY,
     CATEGORY_POWER,
@@ -72,6 +73,12 @@ SENSORS = (
         name="Weather alerts",
         icon="mdi:weather-lightning-rainy",
         category=CATEGORY_WEATHER,
+    ),
+    BcAlertSensorDescription(
+        key="air_quality",
+        name="Air quality",
+        icon="mdi:smog",
+        category=CATEGORY_AIR,
     ),
     BcAlertSensorDescription(
         key="community_notices",

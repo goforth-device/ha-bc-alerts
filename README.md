@@ -1,6 +1,6 @@
 # BC Alerts for Home Assistant
 
-Power outages, road closures, water notices, weather alerts and emergencies for an area of British Columbia, with a pin on the map for each one. The default area is lower Vancouver Island. Weather alerts always cover all of Vancouver Island and Metro Vancouver.
+Power outages, road closures, water notices, weather alerts and emergencies for an area of British Columbia, with a pin on the map for each one. The default area is lower Vancouver Island. Weather alerts always cover all of Vancouver Island and Metro Vancouver. Air quality warnings are kept to the Capital Regional District.
 
 | Feed | What it adds |
 |---|---|
@@ -8,7 +8,7 @@ Power outages, road closures, water notices, weather alerts and emergencies for 
 | DriveBC | Road closures and incidents, leaving out routine construction |
 | Alertable | Water notices, local closures, weather and community notices |
 | EmergencyInfoBC | Evacuation orders and alerts |
-| Environment Canada | Weather warnings, watches and advisories |
+| Environment Canada | Weather warnings, watches and advisories, and air quality warnings |
 | UVic | Campus emergencies from the University of Victoria's emergency page |
 
 ## Install
@@ -19,7 +19,7 @@ Power outages, road closures, water notices, weather alerts and emergencies for 
 
 ## Entities
 
-- Counts: `sensor.bc_alerts_power_outages`, `_road_closures`, `_road_incidents`, `_water_notices`, `_emergencies`, `_weather_alerts`, `_community_notices`. Each lists its closest alerts in the `alerts` attribute.
+- Counts: `sensor.bc_alerts_power_outages`, `_road_closures`, `_road_incidents`, `_water_notices`, `_emergencies`, `_weather_alerts`, `_air_quality`, `_community_notices`. Each lists its closest alerts in the `alerts` attribute.
 - `binary_sensor.bc_alerts_outage_at_home` turns on when your home is inside a BC Hydro outage area.
 - `binary_sensor.bc_alerts_water_notice_nearby` turns on when a water notice is within the distance you set.
 - `binary_sensor.bc_alerts_uvic_emergency` turns on when UVic's emergency page reports an emergency.

@@ -48,13 +48,13 @@ def text(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
-def mock_feeds(aioclient_mock: AiohttpClientMocker) -> None:
+def mock_feeds(aioclient_mock: AiohttpClientMocker, weather: str | None = None) -> None:
     """Serve every feed from its saved sample."""
     aioclient_mock.get(HYDRO_URL, text=text("hydro.json"))
     aioclient_mock.get(DRIVEBC_URL, text=text("drivebc.json"))
     aioclient_mock.get(ALERTABLE_URL, text=text("alertable.json"))
     aioclient_mock.get(EVACUATION_URL, text=text("evacuation.json"))
-    aioclient_mock.get(WEATHER_URL, text=text("weather.json"))
+    aioclient_mock.get(WEATHER_URL, text=weather or text("weather.json"))
     aioclient_mock.get(UVIC_URL, text=text("uvic.html"))
 
 
@@ -100,7 +100,7 @@ async def test_entities_and_pins(
     assert hass.states.get("binary_sensor.bc_alerts_outage_at_home").state == "off"
     assert hass.states.get("binary_sensor.bc_alerts_feed_problem").state == "off"
     assert hass.states.get("binary_sensor.bc_alerts_uvic_emergency").state == "off"
-    assert int(hass.states.get("sensor.bc_alerts_weather_alerts").state) == 1
+    assert hass.states.get("sensor.bc_alerts_air_quality").state == "0"
 
     water = hass.states.get("binary_sensor.bc_alerts_water_notice_nearby")
     assert water.state == "on"
@@ -116,6 +116,26 @@ async def test_entities_and_pins(
     assert "/bc_alerts_static/power.svg" in pictures
     assert "/bc_alerts_static/water.svg" in pictures
     assert all((images / picture.rsplit("/", 1)[1]).is_file() for picture in pictures)
+
+
+async def test_air_quality_in_the_crd_gets_its_own_count_and_pin(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    hass.config.latitude = 48.4284
+    hass.config.longitude = -123.3656
+    feed = json.loads(text("weather.json"))
+    feed["features"][0]["properties"]["expiration_datetime"] = None
+    feed["features"][0]["geometry"]["coordinates"] = [
+        [[-123.6, 48.4], [-123.3, 48.4], [-123.4, 48.7]]
+    ]
+    mock_feeds(aioclient_mock, json.dumps(feed))
+    await setup_entry(hass)
+
+    assert hass.states.get("sensor.bc_alerts_air_quality").state == "1"
+    assert hass.states.get("sensor.bc_alerts_weather_alerts").state == "0"
+    pins = hass.states.async_all("geo_location")
+    pin = next(p for p in pins if p.attributes["category"] == "air_quality")
+    assert pin.attributes["entity_picture"] == "/bc_alerts_static/air_quality.svg"
 
 
 def test_every_pin_image_exists() -> None:

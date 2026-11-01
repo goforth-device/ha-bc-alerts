@@ -151,12 +151,48 @@ def weather_feature(**overrides):
     }
 
 
-def test_weather_reads_the_live_feed_sample():
-    alerts = api.parse_weather(fixture("weather.json"), NOW)
-    assert alerts
-    assert all(a.category == api.CATEGORY_WEATHER for a in alerts)
-    assert alerts[0].title == "Air quality warning: Yellowhead"
+def test_weather_keeps_storms_outside_the_crd():
+    alerts = api.parse_weather({"features": [weather_feature()]}, NOW)
+    assert [a.category for a in alerts] == [api.CATEGORY_WEATHER]
+    assert alerts[0].title == "Wind warning: Metro Vancouver"
     assert 40 < alerts[0].latitude < 60
+
+
+def test_air_quality_outside_the_crd_is_left_out():
+    assert not api.parse_weather(fixture("weather.json"), NOW)
+    duncan = weather_feature(alert_name_en="air quality warning")
+    duncan["geometry"]["coordinates"] = [[[-124.2, 49.0], [-123.6, 48.5], [-123.56, 48.8]]]
+    assert not api.parse_weather({"features": [duncan]}, NOW)
+
+
+def test_air_quality_in_the_crd_gets_its_own_category():
+    victoria = weather_feature(
+        alert_name_en="air quality warning", feature_name_en="Greater Victoria"
+    )
+    victoria["geometry"]["coordinates"] = [[[-123.6, 48.4], [-123.3, 48.4], [-123.4, 48.7]]]
+    alerts = api.parse_weather({"features": [victoria]}, NOW)
+    assert [a.category for a in alerts] == [api.CATEGORY_AIR]
+    assert alerts[0].title == "Air quality warning: Greater Victoria"
+
+
+def test_crd_outline():
+    for place in (
+        VICTORIA,
+        (48.65, -123.40),  # Sidney
+        (48.37, -123.73),  # Sooke
+        (48.55, -124.42),  # Port Renfrew
+        (48.82, -123.50),  # Salt Spring
+        (48.78, -123.17),  # Saturna
+    ):
+        assert api.point_in_polygon(*place, api.CRD_OUTLINE), place
+    for place in (
+        (48.78, -123.71),  # Duncan
+        (48.65, -123.63),  # Shawnigan Lake
+        (49.17, -123.94),  # Nanaimo
+        (49.25, -123.10),  # Vancouver
+        (48.10, -123.40),  # Port Angeles
+    ):
+        assert not api.point_in_polygon(*place, api.CRD_OUTLINE), place
 
 
 def test_weather_skips_ended_and_expired_alerts():

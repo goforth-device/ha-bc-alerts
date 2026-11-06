@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from homeassistant.components.geo_location import GeolocationEvent
@@ -59,13 +60,104 @@ CATEGORY_IMAGES = {
 }
 
 
-def pin_image(alert: Alert) -> str:
+# Weather pins show the hazard, or the pair of hazards when two alerts cover the
+# same area. "general" is anything else, such as a special weather statement.
+WEATHER_ICONS = {
+    "wind": "mdi:weather-windy",
+    "rain": "mdi:weather-pouring",
+    "storm": "mdi:weather-windy-variant",
+    "snow": "mdi:weather-snowy-heavy",
+    "blizzard": "mdi:weather-snowy-heavy",
+    "cold": "mdi:snowflake-thermometer",
+    "outflow": "mdi:snowflake-thermometer",
+    "frost": "mdi:snowflake-variant",
+    "ice": "mdi:weather-snowy-rainy",
+    "heat": "mdi:sun-thermometer",
+    "fog": "mdi:weather-fog",
+    "thunder": "mdi:weather-lightning",
+    "tornado": "mdi:weather-tornado",
+    "surge": "mdi:waves-arrow-up",
+    "surge_storm": "mdi:waves-arrow-up",
+    "general": CATEGORY_ICONS[CATEGORY_WEATHER],
+}
+
+
+def hazard_text(alert: Alert) -> str:
+    """Return the words that say what a weather alert is about.
+
+    That's the alert's name, plus the start of its text for a statement, whose
+    name doesn't say.
+    """
+    name = alert.title.split(":", 1)[0].lower()
+    if "statement" in name or name.startswith("weather"):
+        name += " " + alert.detail[:300].lower()
+    return name
+
+
+def weather_kind(texts: Iterable[str]) -> str:
+    """Return the hazard, or pair of hazards, that some weather alerts describe."""
+    text = " ".join(texts)
+    text = text.replace("freezing rain", "freezing").replace("freezing drizzle", "freezing")
+    wind = "wind" in text.replace("wind chill", "")
+    rain = "rain" in text
+    snow = "snow" in text or "blizzard" in text
+    cold = "cold" in text or "outflow" in text or "wind chill" in text
+    surge = "surge" in text or "coastal flood" in text
+    checks = [
+        ("tornado", "tornado" in text),
+        ("thunder", "thunderstorm" in text),
+        ("blizzard", "winter storm" in text or "blizzard" in text or (snow and wind)),
+        ("surge_storm", surge and (wind or rain)),
+        ("surge", surge),
+        ("ice", "freezing" in text or "flash freeze" in text),
+        ("outflow", "outflow" in text or (cold and wind)),
+        ("storm", wind and rain),
+        ("snow", snow),
+        ("cold", cold),
+        ("heat", "heat" in text),
+        ("wind", wind),
+        ("rain", rain),
+        ("fog", "fog" in text or "visibility" in text),
+        ("frost", "frost" in text),
+    ]
+    return next((kind for kind, hit in checks if hit), "general")
+
+
+def _place(alert: Alert) -> object:
+    """Return what makes two alerts cover the same area."""
+    return alert.extra.get("area") or (round(alert.latitude, 3), round(alert.longitude, 3))
+
+
+def alert_weather_kind(alert: Alert, alerts: Iterable[Alert] = ()) -> str:
+    """Return the hazard for a weather alert's pin, counting other alerts for its area."""
+    place = _place(alert)
+    texts = {hazard_text(alert)}
+    texts.update(
+        hazard_text(other)
+        for other in alerts
+        if other.category == CATEGORY_WEATHER and _place(other) == place
+    )
+    return weather_kind(sorted(texts))
+
+
+def pin_image(alert: Alert, alerts: Iterable[Alert] = ()) -> str:
     """Return the URL of the picture for an alert's pin."""
     if alert.extra.get("event_type") == "CONSTRUCTION" and (
         alert.category == CATEGORY_ROAD
     ):
         return f"{IMAGES_URL}/road_work.svg"
+    if alert.category == CATEGORY_WEATHER:
+        kind = alert_weather_kind(alert, alerts)
+        if kind != "general":
+            return f"{IMAGES_URL}/weather_{kind}.svg"
     return f"{IMAGES_URL}/{CATEGORY_IMAGES[alert.category]}"
+
+
+def pin_icon(alert: Alert, alerts: Iterable[Alert] = ()) -> str:
+    """Return the icon for an alert's pin."""
+    if alert.category == CATEGORY_WEATHER:
+        return WEATHER_ICONS[alert_weather_kind(alert, alerts)]
+    return CATEGORY_ICONS[alert.category]
 
 
 async def async_setup_entry(
@@ -111,8 +203,7 @@ class BcAlertPin(CoordinatorEntity[BcAlertsCoordinator], GeolocationEvent):
         super().__init__(coordinator)
         self.alert = alert
         self._attr_name = f"{CATEGORY_LABELS[alert.category]}: {alert.title}"
-        self._attr_icon = CATEGORY_ICONS[alert.category]
-        self._attr_entity_picture = pin_image(alert)
+        self._set_look()
         self._attr_latitude = alert.latitude
         self._attr_longitude = alert.longitude
         self._attr_distance = coordinator.data.distances[alert.id]
@@ -124,10 +215,17 @@ class BcAlertPin(CoordinatorEntity[BcAlertsCoordinator], GeolocationEvent):
         if alert is None:
             return
         self.alert = alert
+        self._set_look()
         self._attr_latitude = alert.latitude
         self._attr_longitude = alert.longitude
         self._attr_distance = self.coordinator.data.distances[alert.id]
         super()._handle_coordinator_update()
+
+    def _set_look(self) -> None:
+        """Pick the pin's picture and icon, which can change as other alerts come and go."""
+        alerts = self.coordinator.data.alerts.values()
+        self._attr_icon = pin_icon(self.alert, alerts)
+        self._attr_entity_picture = pin_image(self.alert, alerts)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

@@ -17,6 +17,7 @@ from custom_components.bc_alerts.api import (
     ALERTABLE_URL,
     CATEGORY_ROAD,
     CATEGORY_ROAD_CLOSURE,
+    CATEGORY_WEATHER,
     DRIVEBC_URL,
     EVACUATION_URL,
     HYDRO_URL,
@@ -25,7 +26,11 @@ from custom_components.bc_alerts.api import (
     Alert,
 )
 from custom_components.bc_alerts.const import DOMAIN
-from custom_components.bc_alerts.geo_location import CATEGORY_IMAGES, pin_image
+from custom_components.bc_alerts.geo_location import (
+    CATEGORY_IMAGES,
+    pin_icon,
+    pin_image,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 AREA = {
@@ -160,6 +165,66 @@ def test_road_work_gets_the_striped_pin() -> None:
     assert pin_image(work).endswith("road_work.svg")
     assert pin_image(crash).endswith("road_incident.svg")
     assert pin_image(closed).endswith("road_closed.svg")
+
+
+def weather(name: str, area: str = "Greater Victoria", detail: str = "") -> Alert:
+    return Alert(
+        id=f"{name}-{area}",
+        source="Environment Canada",
+        category=CATEGORY_WEATHER,
+        title=f"{name}: {area}",
+        detail=detail,
+        latitude=48.4,
+        longitude=-123.4,
+        extra={"area": area},
+    )
+
+
+@pytest.mark.parametrize(
+    ("names", "kind"),
+    [
+        (["Wind warning"], "wind"),
+        (["Rainfall warning"], "rain"),
+        (["Snowfall warning"], "snow"),
+        (["Extreme cold warning"], "cold"),
+        (["Frost advisory"], "frost"),
+        (["Freezing rain warning"], "ice"),
+        (["Heat warning"], "heat"),
+        (["Fog advisory"], "fog"),
+        (["Severe thunderstorm warning"], "thunder"),
+        (["Tornado warning"], "tornado"),
+        (["Storm surge warning"], "surge"),
+        (["Winter storm warning"], "blizzard"),
+        (["Arctic outflow warning"], "outflow"),
+        (["Wind warning", "Rainfall warning"], "storm"),
+        (["Wind warning", "Snowfall warning"], "blizzard"),
+        (["Wind warning", "Extreme cold warning"], "outflow"),
+        (["Storm surge warning", "Wind warning"], "surge_storm"),
+        (["Special weather statement"], "general"),
+    ],
+)
+def test_weather_pins_show_the_hazard(names: list[str], kind: str) -> None:
+    alerts = [weather(name) for name in names]
+    images = Path(__file__).parent.parent / "custom_components/bc_alerts/images"
+    for alert in alerts:
+        picture = pin_image(alert, alerts)
+        expected = "weather.svg" if kind == "general" else f"weather_{kind}.svg"
+        assert picture.endswith(f"/{expected}")
+        assert (images / expected).is_file()
+        assert pin_icon(alert, alerts).startswith("mdi:")
+
+
+def test_weather_pins_only_combine_alerts_for_the_same_area() -> None:
+    wind = weather("Wind warning")
+    rain = weather("Rainfall warning", area="Howe Sound")
+    assert pin_image(wind, [wind, rain]).endswith("weather_wind.svg")
+    assert pin_image(rain, [wind, rain]).endswith("weather_rain.svg")
+
+
+def test_a_statement_is_read_for_its_hazard() -> None:
+    snow = weather("Special weather statement", detail="Heavy snow is expected over higher terrain.")
+    assert pin_image(snow).endswith("weather_snow.svg")
+    assert pin_image(weather("Wind warning")).endswith("weather_wind.svg")
 
 
 async def test_outage_at_home_turns_on(

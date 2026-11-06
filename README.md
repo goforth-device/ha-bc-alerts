@@ -27,6 +27,8 @@ Power outages, road closures, water notices, weather alerts and emergencies for 
 
 Add pins to a map card with `geo_location_sources: [bc_alerts]`.
 
+Each kind of alert has its own pin picture. Weather pins show the hazard: wind, rain, snow, cold, frost, freezing rain, heat, fog, thunderstorms, tornadoes or storm surge. When two alerts cover the same area, both pins show the pair: wind and rain as a storm, wind and snow (or a winter storm) as a blizzard, wind and cold (or Arctic outflow) as outflow, and storm surge with wind or rain as a surge storm. Anything else, such as a special weather statement, gets the general weather pin.
+
 ## Limits
 
 These feeds aren't documented public APIs, so any of them can change without notice. This project isn't affiliated with BC Hydro, DriveBC, Alertable, Environment Canada, UVic or the Province of BC. Don't rely on it for safety: use official alerts for that.

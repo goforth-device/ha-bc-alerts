@@ -1,6 +1,6 @@
 # BC Alerts for Home Assistant
 
-Power outages, road closures, water notices, weather alerts and emergencies for an area of British Columbia, with a pin on the map for each one. The default area is lower Vancouver Island. Weather alerts always cover all of Vancouver Island and Metro Vancouver. Air quality warnings are kept to the Capital Regional District.
+Power outages, road closures, water notices, weather alerts, emergencies and Swartz Bay–Tsawwassen ferry problems for an area of British Columbia, with a pin on the map for each one. The default area is lower Vancouver Island. Weather alerts always cover all of Vancouver Island and Metro Vancouver. Air quality warnings are kept to the Capital Regional District.
 
 | Feed | What it adds |
 |---|---|
@@ -10,6 +10,7 @@ Power outages, road closures, water notices, weather alerts and emergencies for 
 | EmergencyInfoBC | Evacuation orders and alerts |
 | Environment Canada | Weather warnings, watches and advisories, and air quality warnings |
 | UVic | Campus emergencies from the University of Victoria's emergency page |
+| BC Ferries | Cancellations, delays of 15 minutes or more, sailing waits and service notices between Swartz Bay and Tsawwassen, from the unofficial [bcferriesapi.ca](https://bcferriesapi.ca) |
 
 ## Install
 
@@ -23,6 +24,8 @@ Power outages, road closures, water notices, weather alerts and emergencies for 
 - `binary_sensor.bc_alerts_outage_at_home` turns on when your home is inside a BC Hydro outage area.
 - `binary_sensor.bc_alerts_water_notice_nearby` turns on when a water notice is within the distance you set.
 - `binary_sensor.bc_alerts_uvic_emergency` turns on when UVic's emergency page reports an emergency.
+- `sensor.bc_alerts_ferries` counts ferry alerts. Its `swartz_bay_to_tsawwassen` and `tsawwassen_to_swartz_bay` attributes list the next five sailings each way, with `time`, `vessel`, `status` (such as "Full", "23% space", "Left 9:25 am (25 min late)" or "Cancelled") and `space_pct`.
+- `binary_sensor.bc_alerts_ferry_disruption` turns on when a sailing on the route is cancelled or delayed. Sailing waits alone don't turn it on.
 - `binary_sensor.bc_alerts_feed_problem` turns on when a feed fails. The last good alerts stay in place until it recovers.
 
 Add pins to a map card with `geo_location_sources: [bc_alerts]`.
@@ -31,7 +34,7 @@ Each kind of alert has its own pin picture. Weather pins show the hazard: wind, 
 
 ## Limits
 
-These feeds aren't documented public APIs, so any of them can change without notice. This project isn't affiliated with BC Hydro, DriveBC, Alertable, Environment Canada, UVic or the Province of BC. Don't rely on it for safety: use official alerts for that.
+These feeds aren't documented public APIs, so any of them can change without notice. The ferry API has no cancelled or delayed status, so delays are worked out from departure times and notices, and a cancellation shows up either as a notice or as a sailing that never leaves. Ferry pins sit at the departure terminal, so a Tsawwassen pin widens an auto-fitting map to the mainland. This project isn't affiliated with BC Ferries, bcferriesapi.ca, BC Hydro, DriveBC, Alertable, Environment Canada, UVic or the Province of BC. Don't rely on it for safety: use official alerts for that.
 
 ## Tests
 

@@ -1,0 +1,9 @@
+{
+  "sailingDuration": "1h 35m",
+  "sailings": [
+    {"time": "11:00 am", "arrivalTime": "", "isCancelled": false, "fill": 100, "carFill": 100, "oversizeFill": 100, "vesselName": "Queen of New Westminster", "vesselStatus": ""},
+    {"time": "1:00 pm", "arrivalTime": "", "isCancelled": true, "fill": 0, "carFill": 0, "oversizeFill": 0, "vesselName": "Coastal Renaissance", "vesselStatus": "Cancelled due to mechanical difficulties"},
+    {"time": "3:00 pm", "arrivalTime": "", "isCancelled": false, "fill": 74, "carFill": 77, "oversizeFill": 70, "vesselName": "Spirit of Vancouver Island", "vesselStatus": ""},
+    {"time": "7:00 am", "arrivalTime": "", "isCancelled": false, "fill": 20, "carFill": 18, "oversizeFill": 25, "vesselName": "Spirit of British Columbia", "vesselStatus": ""}
+  ]
+}

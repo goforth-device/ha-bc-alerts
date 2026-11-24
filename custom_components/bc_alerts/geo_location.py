@@ -25,6 +25,7 @@ from .api import (
 from .const import DOMAIN, IMAGES_URL
 from .coordinator import BcAlertsConfigEntry, BcAlertsCoordinator
 from .entity import alert_attributes
+from .ferries import CATEGORY_FERRY
 
 CATEGORY_LABELS = {
     CATEGORY_POWER: "Power",
@@ -35,6 +36,7 @@ CATEGORY_LABELS = {
     CATEGORY_WEATHER: "Weather",
     CATEGORY_AIR: "Air",
     CATEGORY_COMMUNITY: "Notice",
+    CATEGORY_FERRY: "Ferry",
 }
 
 CATEGORY_ICONS = {
@@ -46,6 +48,7 @@ CATEGORY_ICONS = {
     CATEGORY_WEATHER: "mdi:weather-lightning-rainy",
     CATEGORY_AIR: "mdi:smog",
     CATEGORY_COMMUNITY: "mdi:bullhorn",
+    CATEGORY_FERRY: "mdi:ferry",
 }
 
 CATEGORY_IMAGES = {
@@ -57,6 +60,14 @@ CATEGORY_IMAGES = {
     CATEGORY_WEATHER: "weather.svg",
     CATEGORY_AIR: "air_quality.svg",
     CATEGORY_COMMUNITY: "notice.svg",
+    CATEGORY_FERRY: "ferry.svg",
+}
+
+# Ferry pins are red for a cancellation and amber for a sailing wait.
+FERRY_IMAGES = {
+    "cancelled": "ferry_cancelled.svg",
+    "cancellation": "ferry_cancelled.svg",
+    "wait": "ferry_wait.svg",
 }
 
 
@@ -146,6 +157,8 @@ def pin_image(alert: Alert, alerts: Iterable[Alert] = ()) -> str:
         alert.category == CATEGORY_ROAD
     ):
         return f"{IMAGES_URL}/road_work.svg"
+    if alert.category == CATEGORY_FERRY and alert.extra.get("kind") in FERRY_IMAGES:
+        return f"{IMAGES_URL}/{FERRY_IMAGES[alert.extra['kind']]}"
     if alert.category == CATEGORY_WEATHER:
         kind = alert_weather_kind(alert, alerts)
         if kind != "general":

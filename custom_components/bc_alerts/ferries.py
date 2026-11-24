@@ -264,7 +264,10 @@ def sailing_alerts(route: str, sailings: list[Sailing], now: datetime) -> list[A
         )
 
     # A sailing wait: the next sailing that can still take cars is full.
-    waiting = [s for s in ahead if s.departed is None and not s.cancelled]
+    # A sailing past its time is boarding or late, so it can't make you wait.
+    waiting = [
+        s for s in ahead if s.departed is None and not s.cancelled and s.scheduled > now
+    ]
     full = 0
     for s in waiting:
         if not s.full:

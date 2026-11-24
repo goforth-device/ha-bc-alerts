@@ -139,3 +139,12 @@ def test_a_sailing_that_never_left_is_dropped_after_a_few_hours():
     titles = [a.title for a in sailing_alerts("SWBTSA", sailings["SWBTSA"], evening)]
     assert not any("11:00 am" in t for t in titles)
     assert any("1:00 pm" in t for t in titles)
+
+
+def test_a_full_sailing_that_is_boarding_is_not_a_wait():
+    sailings, _ = parse_v2(fixture("ferry_v2.json"))
+    boarding = datetime(2026, 11, 24, 18, 3, tzinfo=UTC)  # 11:03 am
+    kinds = [
+        a.extra["kind"] for a in sailing_alerts("SWBTSA", sailings["SWBTSA"], boarding)
+    ]
+    assert "wait" not in kinds

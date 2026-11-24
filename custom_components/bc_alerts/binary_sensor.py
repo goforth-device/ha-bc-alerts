@@ -19,6 +19,29 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .api import UVIC_ALERT_ID
 from .coordinator import BcAlertsConfigEntry, BcAlertsCoordinator, BcAlertsData
 from .entity import alert_attributes, device_info
+from .ferries import CATEGORY_FERRY
+
+# Ferry alerts that mean a sailing is cancelled or late, not just busy.
+FERRY_DISRUPTIONS = {"cancelled", "cancellation", "delayed", "delay"}
+
+
+def _ferry_disruptions(data: BcAlertsData) -> list:
+    """Return the ferry cancellations and delays."""
+    return [
+        alert
+        for alert in data.in_category(CATEGORY_FERRY)
+        if alert.extra.get("kind") in FERRY_DISRUPTIONS
+    ]
+
+
+def _ferry_disruption_attributes(data: BcAlertsData) -> dict[str, Any]:
+    """List the ferry cancellations and delays."""
+    return {
+        "alerts": [
+            alert_attributes(alert, data.distances[alert.id])
+            for alert in _ferry_disruptions(data)
+        ]
+    }
 
 
 def _home_outage_attributes(data: BcAlertsData) -> dict[str, Any]:
@@ -75,6 +98,14 @@ BINARY_SENSORS = (
         device_class=BinarySensorDeviceClass.PROBLEM,
         is_on_fn=lambda data: UVIC_ALERT_ID in data.alerts,
         attributes_fn=_uvic_attributes,
+    ),
+    BcAlertBinaryDescription(
+        key="ferry_disruption",
+        name="Ferry disruption",
+        icon="mdi:ferry",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        is_on_fn=lambda data: bool(_ferry_disruptions(data)),
+        attributes_fn=_ferry_disruption_attributes,
     ),
     BcAlertBinaryDescription(
         key="feed_problem",

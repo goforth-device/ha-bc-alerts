@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import asyncio
+from dataclasses import dataclass, field
+from datetime import datetime
 import logging
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -17,6 +20,7 @@ from homeassistant.util import dt as dt_util
 from .api import (
     CATEGORY_POWER,
     CATEGORY_WATER,
+    FEED_ERRORS,
     FEEDS,
     Alert,
     Bounds,
@@ -36,6 +40,9 @@ from .const import (
     DOMAIN,
     UPDATE_INTERVAL,
 )
+from .ferries import load_ferries
+
+FERRY_FEED = "BC Ferries"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,6 +58,8 @@ class BcAlertsData:
     home_outage: Alert | None
     nearby_water: tuple[Alert, ...]
     failed_feeds: dict[str, str]
+    # The next few sailings each way, keyed like "swartz_bay_to_tsawwassen".
+    ferry_sailings: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
     def in_category(self, category: str) -> list[Alert]:
         """Return the alerts in a category."""
@@ -82,11 +91,20 @@ class BcAlertsCoordinator(DataUpdateCoordinator[BcAlertsData]):
         self._nearby_km = settings.get(CONF_NEARBY_KM, DEFAULT_NEARBY_KM)
         self._session = async_get_clientsession(hass)
         self._last_good: dict[str, list[Alert]] = {}
+        self._ferry_sailings: dict[str, list[dict[str, Any]]] = {}
 
     async def _async_update_data(self) -> BcAlertsData:
         """Fetch every feed."""
-        fresh, errors = await fetch_all(self._session, self._bounds, dt_util.utcnow())
-        if len(errors) == len(FEEDS):
+        now = dt_util.utcnow()
+        (fresh, errors), ferries = await asyncio.gather(
+            fetch_all(self._session, self._bounds, now),
+            self._load_ferries(now),
+        )
+        if isinstance(ferries, str):
+            errors[FERRY_FEED] = ferries
+        else:
+            fresh[FERRY_FEED], self._ferry_sailings = ferries
+        if len(errors) == len(FEEDS) + 1:
             raise UpdateFailed(f"All feeds failed: {errors}")
         for name, error in errors.items():
             _LOGGER.warning("BC Alerts feed %s failed: %s", name, error)
@@ -125,4 +143,16 @@ class BcAlertsCoordinator(DataUpdateCoordinator[BcAlertsData]):
                 and distances[alert.id] <= self._nearby_km
             ),
             failed_feeds=errors,
+            ferry_sailings=self._ferry_sailings,
         )
+
+    async def _load_ferries(
+        self, now: datetime
+    ) -> tuple[list[Alert], dict[str, list[dict[str, Any]]]] | str:
+        """Load the ferry feed, returning its error as text if it fails."""
+        try:
+            return await load_ferries(
+                self._session, now, dt_util.get_default_time_zone()
+            )
+        except FEED_ERRORS as err:
+            return f"{type(err).__name__}: {err}"

@@ -1,0 +1,68 @@
+{
+  "routes": [
+    {
+      "dataStatus": "available",
+      "serviceDate": "2026-11-24",
+      "checkedAt": "2026-11-24T17:30:05.123456789Z",
+      "sourceURL": "https://www.bcferries.com/current-conditions/SWB-TSA",
+      "routeCode": "SWBTSA",
+      "fromTerminalCode": "SWB",
+      "toTerminalCode": "TSA",
+      "sailingDuration": "1h 35m",
+      "observedAt": "2026-11-24T17:30:05.123456789Z",
+      "notices": [
+        {
+          "id": "8804000000001",
+          "title": "Sailing Delay",
+          "body": "The 9:00 am sailing from Swartz Bay is running about 25 minutes late due to an earlier medical emergency.",
+          "bodyObservedAt": "2026-11-24T17:10:00.5Z",
+          "url": "https://www.bcferries.com/current-conditions/service-notices?serviceNoticeCode=8804000000001",
+          "type": "delay",
+          "severity": "warning",
+          "terminalCodes": ["SWB"],
+          "routeCodes": ["SWBTSA"],
+          "observedAt": "2026-11-24T17:10:00.5Z"
+        }
+      ],
+      "sailings": [
+        {"serviceDate": "2026-11-24", "arrivalDate": "2026-11-24", "scheduledTime": "7:00 am", "actualDepartureTime": "7:02 am", "actualArrivalTime": "8:36 am", "time": "7:02 am", "arrivalTime": "8:36 am", "sailingStatus": "past", "status": "arrived", "capacityKnown": false, "carCapacityKnown": false, "oversizeCapacityKnown": false, "fill": 0, "carFill": 0, "oversizeFill": 0, "vesselName": "Spirit of Vancouver Island", "vesselStatus": "", "statusObservedAt": "2026-11-24T17:30:05.1Z", "observedAt": "2026-11-24T17:30:05.1Z"},
+        {"serviceDate": "2026-11-24", "arrivalDate": "2026-11-24", "scheduledTime": "9:00 am", "actualDepartureTime": "9:25 am", "estimatedArrivalTime": "11:00 am", "time": "9:25 am", "arrivalTime": "11:00 am", "sailingStatus": "current", "status": "departed", "capacityKnown": false, "carCapacityKnown": false, "oversizeCapacityKnown": false, "fill": 0, "carFill": 0, "oversizeFill": 0, "vesselName": "Spirit of British Columbia", "vesselStatus": "", "statusObservedAt": "2026-11-24T17:30:05.1Z", "observedAt": "2026-11-24T17:30:05.1Z"},
+        {"serviceDate": "2026-11-24", "scheduledTime": "11:00 am", "time": "11:00 am", "arrivalTime": "", "sailingStatus": "future", "status": "scheduled", "capacityKnown": true, "carCapacityKnown": true, "oversizeCapacityKnown": true, "fill": 98, "carFill": 100, "oversizeFill": 90, "vesselName": "Spirit of Vancouver Island", "vesselStatus": "", "statusObservedAt": "2026-11-24T17:30:05.1Z", "observedAt": "2026-11-24T17:30:05.1Z"},
+        {"serviceDate": "2026-11-24", "scheduledTime": "1:00 pm", "time": "1:00 pm", "arrivalTime": "", "sailingStatus": "future", "status": "scheduled", "capacityKnown": true, "carCapacityKnown": true, "oversizeCapacityKnown": true, "fill": 70, "carFill": 77, "oversizeFill": 60, "vesselName": "Coastal Celebration", "vesselStatus": "", "statusObservedAt": "2026-11-24T17:30:05.1Z", "observedAt": "2026-11-24T17:30:05.1Z"},
+        {"serviceDate": "2026-11-24", "scheduledTime": "3:00 pm", "time": "3:00 pm", "arrivalTime": "", "sailingStatus": "future", "status": "scheduled", "capacityKnown": false, "carCapacityKnown": false, "oversizeCapacityKnown": false, "fill": 0, "carFill": 0, "oversizeFill": 0, "vesselName": "Spirit of British Columbia", "vesselStatus": "", "statusObservedAt": "2026-11-24T17:30:05.1Z", "observedAt": "2026-11-24T17:30:05.1Z"}
+      ],
+      "terminal": {"code": "SWB", "name": "Victoria (Swartz Bay)", "detailsURL": "", "directionsURL": "", "webcams": [], "observedAt": "2026-11-24T17:30:05.1Z"}
+    },
+    {
+      "dataStatus": "available",
+      "serviceDate": "2026-11-24",
+      "routeCode": "SWBSGI",
+      "fromTerminalCode": "SWB",
+      "toTerminalCode": "SGI",
+      "sailingDuration": "",
+      "notices": [
+        {
+          "id": "8803400396552",
+          "title": "Otter Bay Terminal Life Extension Project - Berth Closure and Alternate Service",
+          "body": "Pender Island service is suspended.",
+          "url": "https://www.bcferries.com/current-conditions/service-notices",
+          "type": "cancellation",
+          "severity": "critical",
+          "terminalCodes": ["POB"],
+          "routeCodes": ["SWBSGI"],
+          "observedAt": "2026-11-24T17:10:00Z"
+        }
+      ],
+      "sailings": []
+    },
+    {
+      "dataStatus": "no-service",
+      "serviceDate": "2026-11-24",
+      "routeCode": "TSANAN",
+      "fromTerminalCode": "TSA",
+      "toTerminalCode": "NAN",
+      "sailingDuration": "",
+      "sailings": []
+    }
+  ]
+}

@@ -26,6 +26,7 @@ from .api import (
 )
 from .coordinator import BcAlertsConfigEntry, BcAlertsCoordinator
 from .entity import alert_attributes, device_info
+from .ferries import CATEGORY_FERRY
 
 MAX_LISTED_ALERTS = 25
 
@@ -86,6 +87,12 @@ SENSORS = (
         icon="mdi:bullhorn",
         category=CATEGORY_COMMUNITY,
     ),
+    BcAlertSensorDescription(
+        key="ferries",
+        name="Ferries",
+        icon="mdi:ferry",
+        category=CATEGORY_FERRY,
+    ),
 )
 
 
@@ -105,7 +112,9 @@ class BcAlertCountSensor(CoordinatorEntity[BcAlertsCoordinator], SensorEntity):
 
     _attr_has_entity_name = True
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _unrecorded_attributes = frozenset({"alerts"})
+    _unrecorded_attributes = frozenset(
+        {"alerts", "swartz_bay_to_tsawwassen", "tsawwassen_to_swartz_bay"}
+    )
     entity_description: BcAlertSensorDescription
 
     def __init__(
@@ -137,6 +146,8 @@ class BcAlertCountSensor(CoordinatorEntity[BcAlertsCoordinator], SensorEntity):
                 for alert in alerts[:MAX_LISTED_ALERTS]
             ]
         }
+        if self.entity_description.category == CATEGORY_FERRY:
+            attributes.update(data.ferry_sailings)
         if self.entity_description.category == CATEGORY_POWER:
             attributes["customers_out"] = sum(
                 alert.extra.get("customers_out", 0) for alert in alerts

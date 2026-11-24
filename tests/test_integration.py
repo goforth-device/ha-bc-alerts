@@ -26,6 +26,7 @@ from custom_components.bc_alerts.api import (
     Alert,
 )
 from custom_components.bc_alerts.const import DOMAIN
+from custom_components.bc_alerts.ferries import FERRY_LEGACY_URL, FERRY_V2_URL
 from custom_components.bc_alerts.geo_location import (
     CATEGORY_IMAGES,
     pin_icon,
@@ -53,6 +54,15 @@ def text(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
+def mock_ferries(aioclient_mock: AiohttpClientMocker) -> None:
+    """Serve saved ferry data, with Tsawwassen to Swartz Bay only on the old API."""
+    aioclient_mock.get(FERRY_V2_URL, text=text("ferry_v2.json"))
+    aioclient_mock.get(
+        FERRY_LEGACY_URL.format(origin="TSA", destination="SWB"),
+        text=text("ferry_tsa_swb.json"),
+    )
+
+
 def mock_feeds(aioclient_mock: AiohttpClientMocker, weather: str | None = None) -> None:
     """Serve every feed from its saved sample."""
     aioclient_mock.get(HYDRO_URL, text=text("hydro.json"))
@@ -61,6 +71,7 @@ def mock_feeds(aioclient_mock: AiohttpClientMocker, weather: str | None = None) 
     aioclient_mock.get(EVACUATION_URL, text=text("evacuation.json"))
     aioclient_mock.get(WEATHER_URL, text=weather or text("weather.json"))
     aioclient_mock.get(UVIC_URL, text=text("uvic.html"))
+    mock_ferries(aioclient_mock)
 
 
 async def setup_entry(hass: HomeAssistant) -> MockConfigEntry:
@@ -255,6 +266,7 @@ async def test_failed_feed_keeps_last_alerts_and_flags_a_problem(
     aioclient_mock.get(EVACUATION_URL, text=text("evacuation.json"))
     aioclient_mock.get(WEATHER_URL, text=text("weather.json"))
     aioclient_mock.get(UVIC_URL, text=text("uvic.html"))
+    mock_ferries(aioclient_mock)
     await entry.runtime_data.async_refresh()
     await hass.async_block_till_done()
 
@@ -279,6 +291,7 @@ async def test_ended_alerts_lose_their_pins(
     aioclient_mock.get(EVACUATION_URL, text=text("evacuation.json"))
     aioclient_mock.get(WEATHER_URL, text=text("weather.json"))
     aioclient_mock.get(UVIC_URL, text=text("uvic.html"))
+    mock_ferries(aioclient_mock)
     await entry.runtime_data.async_refresh()
     await hass.async_block_till_done()
 
@@ -296,3 +309,48 @@ async def test_unload_removes_the_pins(
     assert all(
         pin.state == "unavailable" for pin in hass.states.async_all("geo_location")
     ) or not hass.states.async_all("geo_location")
+
+
+async def test_ferry_entities(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    mock_feeds(aioclient_mock)
+    await setup_entry(hass)
+
+    ferries = hass.states.get("sensor.bc_alerts_ferries")
+    assert int(ferries.state) >= 2
+    titles = [a["title"] for a in ferries.attributes["alerts"]]
+    assert "Sailing Delay" in titles
+    assert "Tsawwassen 1:00 pm sailing cancelled" in titles
+    assert ferries.attributes["tsawwassen_to_swartz_bay"][0]["status"] == "Full"
+    assert "swartz_bay_to_tsawwassen" in ferries.attributes
+
+    disruption = hass.states.get("binary_sensor.bc_alerts_ferry_disruption")
+    assert disruption.state == "on"
+
+    pins = {
+        pin.attributes["entity_picture"]
+        for pin in hass.states.async_all("geo_location")
+        if pin.attributes.get("category") == "ferry"
+    }
+    assert "/bc_alerts_static/ferry_cancelled.svg" in pins
+    assert "/bc_alerts_static/ferry_wait.svg" in pins
+
+
+async def test_failed_ferry_feed_keeps_the_other_feeds(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    aioclient_mock.get(HYDRO_URL, text=text("hydro.json"))
+    aioclient_mock.get(DRIVEBC_URL, text=text("drivebc.json"))
+    aioclient_mock.get(ALERTABLE_URL, text=text("alertable.json"))
+    aioclient_mock.get(EVACUATION_URL, text=text("evacuation.json"))
+    aioclient_mock.get(WEATHER_URL, text=text("weather.json"))
+    aioclient_mock.get(UVIC_URL, text=text("uvic.html"))
+    aioclient_mock.get(FERRY_V2_URL, status=503)
+    await setup_entry(hass)
+
+    assert int(hass.states.get("sensor.bc_alerts_power_outages").state) > 0
+    assert hass.states.get("sensor.bc_alerts_ferries").state == "0"
+    problem = hass.states.get("binary_sensor.bc_alerts_feed_problem")
+    assert problem.state == "on"
+    assert "BC Ferries" in problem.attributes["failed_feeds"]

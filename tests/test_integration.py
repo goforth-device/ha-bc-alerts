@@ -27,6 +27,7 @@ from custom_components.bc_alerts.api import (
 )
 from custom_components.bc_alerts.const import DOMAIN
 from custom_components.bc_alerts.ferries import FERRY_LEGACY_URL, FERRY_V2_URL
+from custom_components.bc_alerts.map_feed import alert_feature
 from custom_components.bc_alerts.geo_location import (
     CATEGORY_IMAGES,
     pin_icon,
@@ -152,6 +153,61 @@ async def test_air_quality_in_the_crd_gets_its_own_count_and_pin(
     pins = hass.states.async_all("geo_location")
     pin = next(p for p in pins if p.attributes["category"] == "air_quality")
     assert pin.attributes["entity_picture"] == "/bc_alerts_static/air_quality.svg"
+
+
+async def test_map_feed_lists_every_alert(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    hass.config.latitude = 48.4284
+    hass.config.longitude = -123.3656
+    mock_feeds(aioclient_mock)
+    await setup_entry(hass)
+
+    feed = hass.states.get("sensor.bc_alerts_map_feed")
+    pins = hass.states.async_all("geo_location")
+    assert int(feed.state) == len(pins)
+    assert feed.attributes["map_feed_version"] == 1
+    assert feed.attributes["area"] == {"bbox": [48.25, -124.9, 49.22, -123.0]}
+    features = feed.attributes["geojson"]["features"]
+    assert len(features) == len(pins)
+    assert len({f["id"] for f in features}) == len(features)
+    for feature in features:
+        lon, lat = feature["geometry"]["coordinates"]
+        assert -140 < lon < -114 and 48 < lat < 60  # longitude first
+        assert feature["properties"]["name"]
+        assert feature["properties"]["kind"]
+        link = feature["properties"].get("link")
+        assert link is None or link["url"].startswith("https://")
+    assert any("link" in f["properties"] for f in features)
+    assert any("notices" in f["properties"] for f in features)
+
+
+def test_map_feed_item_carries_the_alert() -> None:
+    work = Alert(
+        id="drivebc-1",
+        source="DriveBC",
+        category=CATEGORY_ROAD,
+        title="Highway 1: Construction",
+        detail="Night work with short stoppages.",
+        latitude=48.464064,
+        longitude=-123.430712,
+        url="https://www.drivebc.ca/",
+        extra={"event_type": "CONSTRUCTION", "severity": "MAJOR", "areas": []},
+    )
+    feature = alert_feature(work, 7.5)
+    props = feature["properties"]
+    assert feature["id"] == "bc_alerts:drivebc-1"
+    assert feature["geometry"]["coordinates"] == [-123.43071, 48.46406]
+    assert props["kind"] == "road.roadwork"
+    assert props["notices"] == ["Night work with short stoppages."]
+    assert props["link"]["url"] == "https://www.drivebc.ca/"
+    assert {"label": "Severity", "value": "MAJOR"} in props["details"]
+    assert all(row["label"] != "Areas" for row in props["details"])
+    assert "7.5 km" in props["subtitle"]
+
+    plain = replace(work, url="http://example.com/", detail="")
+    assert "link" not in alert_feature(plain, 1.0)["properties"]
+    assert "notices" not in alert_feature(plain, 1.0)["properties"]
 
 
 def test_every_pin_image_exists() -> None:

@@ -13,7 +13,8 @@ direction, so that direction falls back to the older per-route endpoint.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta, tzinfo
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -194,6 +195,50 @@ def parse_v2(
         if code in ROUTES and route.get("dataStatus") == "available":
             sailings[code] = parse_v2_sailings(route, zone)
     return sailings, list(notices.values())
+
+
+# "7:00 pm departing Swartz Bay" in a cancellation notice's text.
+CANCELLED_SAILING = re.compile(
+    r"(\d{1,2}:\d{2})\s*([ap])\.?m\.?\s+(?:sailing\s+)?(?:departing|from|leaving)\s+"
+    r"(Swartz Bay|Tsawwassen)",
+    re.IGNORECASE,
+)
+
+
+def notice_cancellations(
+    sailings: dict[str, list[Sailing]], notices: list[dict[str, Any]], now: datetime
+) -> dict[str, list[Sailing]]:
+    """Mark the sailings a cancellation notice names as cancelled.
+
+    BC Ferries lists cancelled sailings only in the notice's text, so the
+    sailings themselves still look scheduled. Each named time is matched to the
+    sailing at that clock time nearest to now, in the direction it departs.
+    """
+    by_name = {name.lower(): code for code, (name, _, _) in TERMINALS.items()}
+    named: dict[str, set[time]] = {}
+    for notice in notices:
+        if notice.get("type") != "cancellation":
+            continue
+        text = " ".join(str(notice.get(k) or "") for k in ("title", "body"))
+        for clock, half, terminal in CANCELLED_SAILING.findall(text):
+            origin = by_name[terminal.lower()]
+            route = next(r for r, (o, _) in ROUTES.items() if o == origin)
+            named.setdefault(route, set()).add(_clock(f"{clock} {half}m"))
+    result = {}
+    for route, rows in sailings.items():
+        times = named.get(route, set())
+        rows = list(rows)
+        for clock in times:
+            matches = [
+                i
+                for i, s in enumerate(rows)
+                if s.scheduled.time() == clock and s.departed is None
+            ]
+            if matches:
+                i = min(matches, key=lambda i: abs(rows[i].scheduled - now))
+                rows[i] = replace(rows[i], cancelled=True)
+        result[route] = rows
+    return result
 
 
 def upcoming(sailings: list[Sailing], now: datetime) -> list[Sailing]:
@@ -396,6 +441,7 @@ async def load_ferries(
             sailings[route] = parse_legacy_sailings(
                 await _fetch_json(session, url), route, now, zone
             )
+    sailings = notice_cancellations(sailings, notices, now)
     alerts = notice_alerts(notices)
     for route, rows in sailings.items():
         alerts.extend(sailing_alerts(route, rows, now))

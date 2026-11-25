@@ -9,6 +9,7 @@ from custom_components.bc_alerts.ferries import (
     BC_TIME,
     _iso,
     notice_alerts,
+    notice_cancellations,
     parse_legacy_sailings,
     parse_v2,
     sailing_alerts,
@@ -148,3 +149,72 @@ def test_a_full_sailing_that_is_boarding_is_not_a_wait():
         a.extra["kind"] for a in sailing_alerts("SWBTSA", sailings["SWBTSA"], boarding)
     ]
     assert "wait" not in kinds
+
+
+TONIGHT_NOTICE = {
+    "id": 8804220415752,
+    "type": "cancellation",
+    "title": "Sailing Cancellations - Adverse Weather",
+    "routeCodes": ["SWBTSA", "TSASWB"],
+    "body": (
+        "Reissued: 7:08 pm To ensure the safety of our customers and crew, the "
+        "following sailings between Tsawwassen (Vancouver) and Swartz Bay "
+        "(Victoria) must be cancelled for tonight, November 24. Cancelled "
+        "Sailings: 7:00 pm departing Tsawwassen 7:00 pm departing Swartz Bay "
+        "9:00 pm departing Tsawwassen 9:00 pm departing Swartz Bay"
+    ),
+}
+
+
+def test_sailings_named_in_a_cancellation_notice_are_cancelled():
+    sailings, _ = parse_v2(fixture("ferry_v2.json"))
+    notice = dict(
+        TONIGHT_NOTICE,
+        body="Cancelled: 1:00 pm departing Swartz Bay, 3:00 pm departing Tsawwassen",
+    )
+    marked = notice_cancellations(sailings, [notice], NOW)["SWBTSA"]
+    by_time = {s.scheduled.strftime("%H:%M"): s for s in marked}
+    assert by_time["13:00"].cancelled
+    # 3:00 pm departs Tsawwassen, the other direction.
+    assert not any(s.cancelled for t, s in by_time.items() if t != "13:00")
+    titles = [a.title for a in sailing_alerts("SWBTSA", marked, NOW)]
+    assert "Swartz Bay 1:00 pm sailing cancelled" in titles
+    row = next(r for r in summary(marked, NOW) if r["time"] == "1:00 pm")
+    assert row["status"] == "Cancelled"
+
+
+def test_tonights_notice_text_names_both_directions():
+    sailings, _ = parse_v2(fixture("ferry_v2.json"))
+    seven = next(s for s in sailings["SWBTSA"] if s.scheduled.hour == 11)
+    evening = {
+        "SWBTSA": [
+            seven.__class__(
+                route="SWBTSA",
+                scheduled=seven.scheduled.replace(hour=h),
+                vessel="Spirit",
+            )
+            for h in (19, 21)
+        ],
+        "TSASWB": [
+            seven.__class__(
+                route="TSASWB",
+                scheduled=seven.scheduled.replace(hour=h),
+                vessel="Spirit",
+            )
+            for h in (17, 19, 21)
+        ],
+    }
+    at_740 = datetime(2026, 11, 25, 2, 40, tzinfo=UTC)
+    marked = notice_cancellations(evening, [TONIGHT_NOTICE], at_740)
+    assert [s.cancelled for s in marked["SWBTSA"]] == [True, True]
+    assert [s.cancelled for s in marked["TSASWB"]] == [False, True, True]
+    kinds = {
+        a.extra["kind"] for a in sailing_alerts("SWBTSA", marked["SWBTSA"], at_740)
+    }
+    assert kinds == {"cancelled"}  # no "hasn't left, 40 min late"
+
+
+def test_delay_notices_cancel_nothing():
+    sailings, notices = parse_v2(fixture("ferry_v2.json"))
+    marked = notice_cancellations(sailings, notices, NOW)
+    assert not any(s.cancelled for s in marked["SWBTSA"])

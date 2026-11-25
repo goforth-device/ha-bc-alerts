@@ -30,6 +30,19 @@ Power outages, road closures, water notices, weather alerts, emergencies and Swa
 
 Add pins to a map card with `geo_location_sources: [bc_alerts]`.
 
+### Tap a pin to open the alert
+
+The stock map card opens history when you tap a pin. To see the alert itself, use `sensor.bc_alerts_map_feed` with [Map feed card](https://github.com/jesmak/map-feed-card) (in HACS). The sensor lists every alert in the [Map Feed format](https://github.com/jesmak/map-feed-card/blob/main/docs/map-feed-format.md). Tapping a pin opens the alert's text, who issued it, when it expires and a link to the alert's page.
+
+```yaml
+type: custom:map-feed-card
+entities:
+  - entity: sensor.bc_alerts_map_feed
+    frame: items
+```
+
+Map feed card draws its own symbols in each alert's colour, not the pin pictures below. The sensor's `geojson` attribute isn't recorded in history.
+
 Each kind of alert has its own pin picture. Weather pins show the hazard: wind, rain, snow, cold, frost, freezing rain, heat, fog, thunderstorms, tornadoes or storm surge. When two alerts cover the same area, both pins show the pair: wind and rain as a storm, wind and snow (or a winter storm) as a blizzard, wind and cold (or Arctic outflow) as outflow, and storm surge with wind or rain as a surge storm. Anything else, such as a special weather statement, gets the general weather pin.
 
 ## Limits

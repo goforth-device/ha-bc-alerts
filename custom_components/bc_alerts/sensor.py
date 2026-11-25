@@ -24,9 +24,11 @@ from .api import (
     CATEGORY_WATER,
     CATEGORY_WEATHER,
 )
+from .const import CONF_EAST, CONF_NORTH, CONF_SOUTH, CONF_WEST
 from .coordinator import BcAlertsConfigEntry, BcAlertsCoordinator
 from .entity import alert_attributes, device_info
 from .ferries import CATEGORY_FERRY
+from .map_feed import map_feed_attributes
 
 MAX_LISTED_ALERTS = 25
 
@@ -102,8 +104,12 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the sensors."""
+    coordinator = entry.runtime_data
     async_add_entities(
-        BcAlertCountSensor(entry.runtime_data, description) for description in SENSORS
+        [
+            *(BcAlertCountSensor(coordinator, description) for description in SENSORS),
+            BcAlertMapFeedSensor(coordinator),
+        ]
     )
 
 
@@ -153,3 +159,39 @@ class BcAlertCountSensor(CoordinatorEntity[BcAlertsCoordinator], SensorEntity):
                 alert.extra.get("customers_out", 0) for alert in alerts
             )
         return attributes
+
+
+class BcAlertMapFeedSensor(CoordinatorEntity[BcAlertsCoordinator], SensorEntity):
+    """Every alert in the Map Feed format, for maps whose pins open the alert."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Map feed"
+    _attr_icon = "mdi:map-marker-alert"
+    _unrecorded_attributes = frozenset(
+        {"geojson", "legend", "area", "attribution", "feed_type", "map_feed_version"}
+    )
+
+    def __init__(self, coordinator: BcAlertsCoordinator) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        entry = coordinator.config_entry
+        self._attr_unique_id = f"{entry.entry_id}_map_feed"
+        self._attr_device_info = device_info(entry)
+        settings = {**entry.data, **entry.options}
+        self._bbox = (
+            settings[CONF_SOUTH],
+            settings[CONF_WEST],
+            settings[CONF_NORTH],
+            settings[CONF_EAST],
+        )
+
+    @property
+    def native_value(self) -> int:
+        """Return the number of alerts on the map."""
+        return len(self.coordinator.data.alerts)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the alerts as a map feed."""
+        data = self.coordinator.data
+        return map_feed_attributes(list(data.alerts.values()), data.distances, self._bbox)
